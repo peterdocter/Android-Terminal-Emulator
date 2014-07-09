@@ -16,9 +16,22 @@
 
 package jackpal.androidterm;
 
-import java.io.UnsupportedEncodingException;
+import jackpal.androidterm.compat.ActionBarCompat;
+import jackpal.androidterm.compat.ActivityCompat;
+import jackpal.androidterm.compat.AndroidCompat;
+import jackpal.androidterm.compat.MenuItemCompat;
+import jackpal.androidterm.emulatorview.EmulatorView;
+import jackpal.androidterm.emulatorview.TermSession;
+import jackpal.androidterm.emulatorview.UpdateCallback;
+import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompat;
+import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompatFactory;
+import jackpal.androidterm.emulatorview.compat.KeycodeConstants;
+import jackpal.androidterm.util.SessionList;
+import jackpal.androidterm.util.TermSettings;
+
 import java.text.Collator;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 import android.app.Activity;
@@ -29,8 +42,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.net.Uri;
@@ -40,7 +56,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
-import android.text.ClipboardManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -58,18 +73,6 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import jackpal.androidterm.emulatorview.ColorScheme;
-import jackpal.androidterm.emulatorview.EmulatorView;
-import jackpal.androidterm.emulatorview.TermSession;
-import jackpal.androidterm.emulatorview.UpdateCallback;
-
-import jackpal.androidterm.compat.ActionBarCompat;
-import jackpal.androidterm.compat.ActivityCompat;
-import jackpal.androidterm.compat.AndroidCompat;
-import jackpal.androidterm.compat.MenuItemCompat;
-import jackpal.androidterm.util.SessionList;
-import jackpal.androidterm.util.TermSettings;
 
 /**
  * A terminal emulator activity.
@@ -101,7 +104,6 @@ public class Term extends Activity implements UpdateCallback {
     private boolean mStopServiceOnFinish = false;
 
     private Intent TSIntent;
-    private Intent mLastNewIntent;
 
     public static final int REQUEST_CHOOSE_WINDOW = 1;
     public static final String EXTRA_WINDOW_ID = "jackpal.androidterm.window_id";
@@ -215,7 +217,15 @@ public class Term extends Activity implements UpdateCallback {
 
         @Override
         public boolean onSingleTapUp(MotionEvent e) {
-            doUIToggle((int) e.getX(), (int) e.getY(), view.getVisibleWidth(), view.getVisibleHeight());
+            // Let the EmulatorView handle taps if mouse tracking is active
+            if (view.isMouseTrackingActive()) return false;
+
+            //Check for link at tap location
+            String link = view.getURLat(e.getX(), e.getY());
+            if(link != null)
+                execURL(link);
+            else
+                doUIToggle((int) e.getX(), (int) e.getY(), view.getVisibleWidth(), view.getVisibleHeight());
             return true;
         }
 
@@ -239,8 +249,57 @@ public class Term extends Activity implements UpdateCallback {
         }
     }
 
-    private View.OnKeyListener mBackKeyListener = new View.OnKeyListener() {
+    /**
+     * Should we use keyboard shortcuts?
+     */
+    private boolean mUseKeyboardShortcuts;
+
+    /**
+     * Intercepts keys before the view/terminal gets it.
+     */
+    private View.OnKeyListener mKeyListener = new View.OnKeyListener() {
         public boolean onKey(View v, int keyCode, KeyEvent event) {
+            return backkeyInterceptor(keyCode, event) || keyboardShortcuts(keyCode, event);
+        }
+
+        /**
+         * Keyboard shortcuts (tab management, paste)
+         */
+        private boolean keyboardShortcuts(int keyCode, KeyEvent event) {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) {
+                return false;
+            }
+            if (!mUseKeyboardShortcuts) {
+                return false;
+            }
+            boolean isCtrlPressed = (event.getMetaState() & KeycodeConstants.META_CTRL_ON) != 0;
+            boolean isShiftPressed = (event.getMetaState() & KeycodeConstants.META_SHIFT_ON) != 0;
+
+            if (keyCode == KeycodeConstants.KEYCODE_TAB && isCtrlPressed) {
+                if (isShiftPressed) {
+                    mViewFlipper.showPrevious();
+                } else {
+                    mViewFlipper.showNext();
+                }
+
+                return true;
+            } else if (keyCode == KeycodeConstants.KEYCODE_N && isCtrlPressed && isShiftPressed) {
+                doCreateNewWindow();
+
+                return true;
+            } else if (keyCode == KeycodeConstants.KEYCODE_V && isCtrlPressed && isShiftPressed) {
+                doPaste();
+
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        /**
+         * Make sure the back button always leaves the application.
+         */
+        private boolean backkeyInterceptor(int keyCode, KeyEvent event) {
             if (keyCode == KeyEvent.KEYCODE_BACK && mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES && mActionBar.isShowing()) {
                 /* We need to intercept the key event before the view sees it,
                    otherwise the view will handle it before we get it */
@@ -447,7 +506,7 @@ public class Term extends Activity implements UpdateCallback {
         TermView emulatorView = new TermView(this, session, metrics);
 
         emulatorView.setExtGestureListener(new EmulatorViewGestureListener(emulatorView));
-        emulatorView.setOnKeyListener(mBackKeyListener);
+        emulatorView.setOnKeyListener(mKeyListener);
         registerForContextMenu(emulatorView);
 
         return emulatorView;
@@ -467,9 +526,10 @@ public class Term extends Activity implements UpdateCallback {
     }
 
     private void updatePrefs() {
+        mUseKeyboardShortcuts = mSettings.getUseKeyboardShortcutsFlag();
+
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        ColorScheme colorScheme = new ColorScheme(mSettings.getColorScheme());
 
         mViewFlipper.updatePrefs(mSettings);
 
@@ -502,6 +562,19 @@ public class Term extends Activity implements UpdateCallback {
                 }
             }
         }
+
+        int orientation = mSettings.getScreenOrientation();
+        int o = 0;
+        if (orientation == 0) {
+            o = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        } else if (orientation == 1) {
+            o = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        } else if (orientation == 2) {
+            o = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+        } else {
+            /* Shouldn't be happened. */
+        }
+        setRequestedOrientation(o);
     }
 
     @Override
@@ -531,6 +604,13 @@ public class Term extends Activity implements UpdateCallback {
         }
 
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
+        // the HOME dir needs to be set here since it comes from Context
+        SharedPreferences.Editor editor = mPrefs.edit();
+        String defValue = getDir("HOME", MODE_PRIVATE).getAbsolutePath();
+        String homePath = mPrefs.getString("home_path", defValue);
+        editor.putString("home_path", homePath);
+        editor.commit();
+
         mSettings.readPrefs(mPrefs);
         updatePrefs();
 
@@ -635,6 +715,10 @@ public class Term extends Activity implements UpdateCallback {
             doToggleWakeLock();
         } else if (id == R.id.menu_toggle_wifilock) {
             doToggleWifiLock();
+        } else if  (id == R.id.action_help) {
+                Intent openHelp = new Intent(Intent.ACTION_VIEW,
+                Uri.parse(getString(R.string.help_url)));
+                startActivity(openHelp);
         }
         // Hide the action bar if appropriate
         if (mActionBarMode == TermSettings.ACTION_BAR_MODE_HIDES) {
@@ -892,7 +976,8 @@ public class Term extends Activity implements UpdateCallback {
     }
 
     private boolean canPaste() {
-        ClipboardManager clip = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipboardManagerCompat clip = ClipboardManagerCompatFactory
+                .getManager(getApplicationContext());
         if (clip.hasText()) {
             return true;
         }
@@ -941,22 +1026,18 @@ public class Term extends Activity implements UpdateCallback {
     }
 
     private void doCopyAll() {
-        ClipboardManager clip = (ClipboardManager)
-             getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipboardManagerCompat clip = ClipboardManagerCompatFactory
+                .getManager(getApplicationContext());
         clip.setText(getCurrentTermSession().getTranscriptText().trim());
     }
 
     private void doPaste() {
-        ClipboardManager clip = (ClipboardManager)
-         getSystemService(Context.CLIPBOARD_SERVICE);
-        CharSequence paste = clip.getText();
-        byte[] utf8;
-        try {
-            utf8 = paste.toString().getBytes("UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            Log.e(TermDebug.LOG_TAG, "UTF-8 encoding not found.");
+        if (!canPaste()) {
             return;
         }
+        ClipboardManagerCompat clip = ClipboardManagerCompatFactory
+                .getManager(getApplicationContext());
+        CharSequence paste = clip.getText();
         getCurrentTermSession().write(paste.toString());
     }
 
@@ -1061,5 +1142,20 @@ public class Term extends Activity implements UpdateCallback {
             break;
         }
         getCurrentEmulatorView().requestFocus();
+    }
+
+    /**
+     *
+     * Send a URL up to Android to be handled by a browser.
+     * @param link The URL to be opened.
+     */
+    private void execURL(String link)
+    {
+        Uri webLink = Uri.parse(link);
+        Intent openLink = new Intent(Intent.ACTION_VIEW, webLink);
+        PackageManager pm = getPackageManager();
+        List<ResolveInfo> handlers = pm.queryIntentActivities(openLink, 0);
+        if(handlers.size() > 0)
+            startActivity(openLink);
     }
 }

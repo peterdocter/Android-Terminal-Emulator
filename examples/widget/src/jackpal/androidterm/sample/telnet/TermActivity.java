@@ -32,6 +32,7 @@ import jackpal.androidterm.emulatorview.TermSession;
  */
 public class TermActivity extends Activity
 {
+    final private static String TAG = "TermActivity";
     private EditText mEntry;
     private EmulatorView mEmulatorView;
     private TermSession mSession;
@@ -108,6 +109,10 @@ public class TermActivity extends Activity
         } else {
             // Create a local shell session.
             session = createLocalTermSession();
+            if (session == null) {
+                finish();
+                return;
+            }
             mSession = session;
         }
 
@@ -172,7 +177,8 @@ public class TermActivity extends Activity
         try {
             exec = execBuild.start();
         } catch (Exception e) {
-            // handle exception here
+            Log.e(TAG, "Could not start terminal process.", e);
+            return null;
         }
 
         /* ... and connect the process's I/O streams to the TermSession. */
@@ -225,7 +231,7 @@ public class TermActivity extends Activity
                     Socket socket = new Socket(hostname, portNum);
                     mSocket = socket;
                 } catch (IOException e) {
-                    Log.e("Telnet", e.toString());
+                    Log.e(TAG, "Could not create socket", e);
                     return;
                 }
 

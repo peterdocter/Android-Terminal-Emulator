@@ -16,11 +16,10 @@
 
 package jackpal.androidterm.util;
 
-import android.content.res.Resources;
-import android.content.SharedPreferences;
-import android.view.KeyEvent;
-
 import jackpal.androidterm.R;
+import android.content.SharedPreferences;
+import android.content.res.Resources;
+import android.view.KeyEvent;
 
 /**
  * Terminal emulator settings
@@ -30,6 +29,7 @@ public class TermSettings {
 
     private int mStatusBar;
     private int mActionBarMode;
+    private int mOrientation;
     private int mCursorStyle;
     private int mCursorBlink;
     private int mFontSize;
@@ -47,16 +47,20 @@ public class TermSettings {
     private boolean mVerifyPath;
     private boolean mDoPathExtensions;
     private boolean mAllowPathPrepend;
+    private String mHomePath;
 
     private String mPrependPath = null;
     private String mAppendPath = null;
 
     private boolean mAltSendsEsc;
 
+    private boolean mMouseTracking;
+
+    private boolean mUseKeyboardShortcuts;
+
     private static final String STATUSBAR_KEY = "statusbar";
     private static final String ACTIONBAR_KEY = "actionbar";
-    private static final String CURSORSTYLE_KEY = "cursorstyle";
-    private static final String CURSORBLINK_KEY = "cursorblink";
+    private static final String ORIENTATION_KEY = "orientation";
     private static final String FONTSIZE_KEY = "fontsize";
     private static final String COLOR_KEY = "color";
     private static final String UTF8_KEY = "utf8_by_default";
@@ -71,7 +75,10 @@ public class TermSettings {
     private static final String VERIFYPATH_KEY = "verify_path";
     private static final String PATHEXTENSIONS_KEY = "do_path_extensions";
     private static final String PATHPREPEND_KEY = "allow_prepend_path";
+    private static final String HOMEPATH_KEY = "home_path";
     private static final String ALT_SENDS_ESC = "alt_sends_esc";
+    private static final String MOUSE_TRACKING = "mouse_tracking";
+    private static final String USE_KEYBOARD_SHORTCUTS = "use_keyboard_shortcuts";
 
     public static final int WHITE               = 0xffffffff;
     public static final int BLACK               = 0xff000000;
@@ -84,6 +91,7 @@ public class TermSettings {
     public static final int SOLARIZED_BG        = 0xfffdf6e3;
     public static final int SOLARIZED_DARK_FG   = 0xff839496;
     public static final int SOLARIZED_DARK_BG   = 0xff002b36;
+    public static final int LINUX_CONSOLE_WHITE = 0xffaaaaaa;
 
     // foreground color, background color
     public static final int[][] COLOR_SCHEMES = {
@@ -95,13 +103,18 @@ public class TermSettings {
         {RED,               BLACK},
         {HOLO_BLUE,         BLACK},
         {SOLARIZED_FG,      SOLARIZED_BG},
-        {SOLARIZED_DARK_FG, SOLARIZED_DARK_BG}
+        {SOLARIZED_DARK_FG, SOLARIZED_DARK_BG},
+        {LINUX_CONSOLE_WHITE, BLACK}
     };
 
     public static final int ACTION_BAR_MODE_NONE = 0;
     public static final int ACTION_BAR_MODE_ALWAYS_VISIBLE = 1;
     public static final int ACTION_BAR_MODE_HIDES = 2;
     private static final int ACTION_BAR_MODE_MAX = 2;
+
+    public static final int ORIENTATION_UNSPECIFIED = 0;
+    public static final int ORIENTATION_LANDSCAPE = 1;
+    public static final int ORIENTATION_PORTRAIT = 2;
 
     /** An integer not in the range of real key codes. */
     public static final int KEYCODE_NONE = -1;
@@ -145,6 +158,7 @@ public class TermSettings {
     private void readDefaultPrefs(Resources res) {
         mStatusBar = Integer.parseInt(res.getString(R.string.pref_statusbar_default));
         mActionBarMode = res.getInteger(R.integer.pref_actionbar_default);
+        mOrientation = res.getInteger(R.integer.pref_orientation_default);
         mCursorStyle = Integer.parseInt(res.getString(R.string.pref_cursorstyle_default));
         mCursorBlink = Integer.parseInt(res.getString(R.string.pref_cursorblink_default));
         mFontSize = Integer.parseInt(res.getString(R.string.pref_fontsize_default));
@@ -162,13 +176,17 @@ public class TermSettings {
         mVerifyPath = res.getBoolean(R.bool.pref_verify_path_default);
         mDoPathExtensions = res.getBoolean(R.bool.pref_do_path_extensions_default);
         mAllowPathPrepend = res.getBoolean(R.bool.pref_allow_prepend_path_default);
+        // the mHomePath default is set dynamically in readPrefs()
         mAltSendsEsc = res.getBoolean(R.bool.pref_alt_sends_esc_default);
+        mMouseTracking = res.getBoolean(R.bool.pref_mouse_tracking_default);
+        mUseKeyboardShortcuts = res.getBoolean(R.bool.pref_use_keyboard_shortcuts_default);
     }
 
     public void readPrefs(SharedPreferences prefs) {
         mPrefs = prefs;
         mStatusBar = readIntPref(STATUSBAR_KEY, mStatusBar, 1);
         mActionBarMode = readIntPref(ACTIONBAR_KEY, mActionBarMode, ACTION_BAR_MODE_MAX);
+        mOrientation = readIntPref(ORIENTATION_KEY, mOrientation, 2);
         // mCursorStyle = readIntPref(CURSORSTYLE_KEY, mCursorStyle, 2);
         // mCursorBlink = readIntPref(CURSORBLINK_KEY, mCursorBlink, 1);
         mFontSize = readIntPref(FONTSIZE_KEY, mFontSize, 288);
@@ -187,7 +205,11 @@ public class TermSettings {
         mVerifyPath = readBooleanPref(VERIFYPATH_KEY, mVerifyPath);
         mDoPathExtensions = readBooleanPref(PATHEXTENSIONS_KEY, mDoPathExtensions);
         mAllowPathPrepend = readBooleanPref(PATHPREPEND_KEY, mAllowPathPrepend);
+        mHomePath = readStringPref(HOMEPATH_KEY, mHomePath);
         mAltSendsEsc = readBooleanPref(ALT_SENDS_ESC, mAltSendsEsc);
+        mMouseTracking = readBooleanPref(MOUSE_TRACKING, mMouseTracking);
+        mUseKeyboardShortcuts = readBooleanPref(USE_KEYBOARD_SHORTCUTS,
+                mUseKeyboardShortcuts);
         mPrefs = null;  // we leak a Context if we hold on to this
     }
 
@@ -217,6 +239,10 @@ public class TermSettings {
 
     public int actionBarMode() {
         return mActionBarMode;
+    }
+
+    public int getScreenOrientation() {
+        return mOrientation;
     }
 
     public int getCursorStyle() {
@@ -249,6 +275,14 @@ public class TermSettings {
 
     public boolean getAltSendsEscFlag() {
         return mAltSendsEsc;
+    }
+
+    public boolean getMouseTrackingFlag() {
+        return mMouseTracking;
+    }
+
+    public boolean getUseKeyboardShortcutsFlag() {
+        return mUseKeyboardShortcuts;
     }
 
     public int getBackKeyCharacter() {
@@ -325,5 +359,13 @@ public class TermSettings {
 
     public String getAppendPath() {
         return mAppendPath;
+    }
+
+    public void setHomePath(String homePath) {
+        mHomePath = homePath;
+    }
+
+    public String getHomePath() {
+        return mHomePath;
     }
 }

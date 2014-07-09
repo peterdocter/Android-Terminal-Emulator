@@ -56,7 +56,6 @@ public class ShellTermSession extends TermSession {
 
     public static final int PROCESS_EXIT_FINISHES_SESSION = 0;
     public static final int PROCESS_EXIT_DISPLAYS_MESSAGE = 1;
-    private int mProcessExitBehavior = PROCESS_EXIT_FINISHES_SESSION;
 
     private String mProcessExitMessage;
 
@@ -128,9 +127,10 @@ public class ShellTermSession extends TermSession {
         if (settings.verifyPath()) {
             path = checkPath(path);
         }
-        String[] env = new String[2];
+        String[] env = new String[3];
         env[0] = "TERM=" + settings.getTermType();
         env[1] = "PATH=" + path;
+        env[2] = "HOME=" + settings.getHomePath();
 
         createSubprocess(processId, settings.getShell(), env);
         mProcId = processId[0];

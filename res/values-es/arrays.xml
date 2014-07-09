@@ -24,7 +24,13 @@
     <string-array name="entries_actionbar_preference">
         <!-- <item>Action bar disabled</item> -->
         <item>Mostrar</item>
-        <item>Ocultar (Pulsa MENU para mostrarla)</item>
+        <item>Ocultar (Pulsa MENÚ para mostrarla)</item>
+    </string-array>
+
+    <string-array name="entries_orientation_preference">
+        <item>Automática</item>
+        <item>Horizontal</item>
+        <item>Vertical</item>
     </string-array>
 
     <string-array name="entries_cursorblink_preference">
@@ -72,6 +78,7 @@
         <item>Azul en fondo negro</item>
         <item>Solarized Light</item>
         <item>Solarized Dark</item>
+        <item>Linux Console</item>
     </string-array>
 
     <string-array name="entries_backaction_preference">

@@ -56,6 +56,11 @@ import android.os.Message;
  * and closes the attached I/O streams.
  */
 public class TermSession {
+    public void setKeyListener(TermKeyListener l) {
+        mKeyListener = l;
+    }
+    private TermKeyListener mKeyListener;
+
     private ColorScheme mColorScheme = BaseTextRenderer.defaultColorScheme;
     private UpdateCallback mNotify;
 
@@ -218,6 +223,7 @@ public class TermSession {
         mTranscriptScreen = new TranscriptScreen(columns, TRANSCRIPT_ROWS, rows, mColorScheme);
         mEmulator = new TerminalEmulator(this, mTranscriptScreen, columns, rows, mColorScheme);
         mEmulator.setDefaultUTF8Mode(mDefaultUTF8Mode);
+        mEmulator.setKeyListener(mKeyListener);
 
         mIsRunning = true;
         mReaderThread.start();
@@ -284,8 +290,16 @@ public class TermSession {
      * @param codePoint The Unicode code point to write to the terminal.
      */
     public void write(int codePoint) {
-        CharBuffer charBuf = mWriteCharBuffer;
         ByteBuffer byteBuf = mWriteByteBuffer;
+        if (codePoint < 128) {
+            // Fast path for ASCII characters
+            byte[] buf = byteBuf.array();
+            buf[0] = (byte) codePoint;
+            write(buf, 0, 1);
+            return;
+        }
+
+        CharBuffer charBuf = mWriteCharBuffer;
         CharsetEncoder encoder = mUTF8Encoder;
 
         charBuf.clear();
@@ -406,8 +420,6 @@ public class TermSession {
     /**
      * Notify the UpdateCallback registered for title changes, if any, that the
      * terminal session's title has changed.
-     *
-     * @param title The terminal's new title.
      */
     protected void notifyTitleChanged() {
         UpdateCallback listener = mTitleChangedListener;
@@ -510,7 +522,6 @@ public class TermSession {
             return;
         }
         mEmulator.setColorScheme(scheme);
-        mTranscriptScreen.setColorScheme(scheme);
     }
 
     /**
@@ -582,6 +593,7 @@ public class TermSession {
      */
     public void finish() {
         mIsRunning = false;
+        mEmulator.finish();
         if (mTranscriptScreen != null) {
             mTranscriptScreen.finish();
         }

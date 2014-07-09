@@ -18,7 +18,6 @@ package jackpal.androidterm;
 
 import android.content.Context;
 import android.util.DisplayMetrics;
-import android.util.Log;
 
 import jackpal.androidterm.emulatorview.ColorScheme;
 import jackpal.androidterm.emulatorview.EmulatorView;
@@ -27,7 +26,6 @@ import jackpal.androidterm.emulatorview.TermSession;
 import jackpal.androidterm.util.TermSettings;
 
 public class TermView extends EmulatorView {
-    private static final String TAG = "TermView";
 
     public TermView(Context context, TermSession session, DisplayMetrics metrics) {
         super(context, session, metrics);
@@ -39,7 +37,6 @@ public class TermView extends EmulatorView {
         }
 
         setTextSize(settings.getFontSize());
-        setCursorStyle(settings.getCursorStyle(), settings.getCursorBlink());
         setUseCookedIME(settings.useCookedIME());
         setColorScheme(scheme);
         setBackKeyCharacter(settings.getBackKeyCharacter());
@@ -47,6 +44,7 @@ public class TermView extends EmulatorView {
         setControlKeyCode(settings.getControlKeyCode());
         setFnKeyCode(settings.getFnKeyCode());
         setTermType(settings.getTermType());
+        setMouseTracking(settings.getMouseTrackingFlag());
     }
 
     public void updatePrefs(TermSettings settings) {
